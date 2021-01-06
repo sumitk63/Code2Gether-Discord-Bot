@@ -1,14 +1,15 @@
 ﻿using System.Threading.Tasks;
+using Code2Gether_Discord_Bot.Library.CustomExceptions;
 using Newtonsoft.Json;
 using RestSharp;
 
 namespace Code2Gether_Discord_Bot.Library.Models.Repositories
 {
-    public class MemberDAL : WebApiDALBase<Member>, IMemberRepository
+    public class MemberDataAccessLayer : WebApiDataAccessLayerBase<Member>, IMemberRepository
     {
         protected override string _tableRoute => "Members";
 
-        public MemberDAL(string connectionString) : base(connectionString) { }
+        public MemberDataAccessLayer(string connectionString) : base(connectionString) { }
         
         protected override string SerializeModel(Member memberToSerialize)
         {
@@ -30,7 +31,9 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
 
             var result = await GetClient().ExecuteGetAsync<Member>(request);
 
-            return result.IsSuccessful ? result.Data : null;
+            if (!result.IsSuccessful) throw new DataAccessLayerTransactionFailedException($"Read via snowflake ID {snowflakeId} failed!");
+
+            return result.Data;
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Code2Gether_Discord_Bot.Library.CustomExceptions;
 using Code2Gether_Discord_Bot.Library.Models;
 using Code2Gether_Discord_Bot.Library.Models.Repositories;
 
@@ -12,7 +13,7 @@ namespace Code2Gether_Discord_Bot.Tests.Fakes.FakeRepositories
     {
         public IDictionary<int, Member> Members = new ConcurrentDictionary<int, Member>();
 
-        public Task<bool> CreateAsync(Member newMember)
+        public Task CreateAsync(Member newMember)
         {
             return Task.FromResult(Members.TryAdd(newMember.ID, newMember));
         }
@@ -22,7 +23,7 @@ namespace Code2Gether_Discord_Bot.Tests.Fakes.FakeRepositories
             if (Members.TryGetValue(id, out Member member))
                 return Task.FromResult(member);
 
-            throw new Exception($"Failed to member project with ID {id}");
+            throw new DataAccessLayerTransactionFailedException($"Failed to member project with ID {id}");
         }
 
         public Task<Member> ReadFromSnowflakeAsync(ulong memberSnowflakeId)
@@ -35,14 +36,13 @@ namespace Code2Gether_Discord_Bot.Tests.Fakes.FakeRepositories
             return Task.FromResult(Members.Select(x => x.Value));
         }
 
-        public async Task<bool> UpdateAsync(Member existingMember)
+        public async Task UpdateAsync(Member existingMember)
         {
-            if (await DeleteAsync(existingMember.ID))
-                return Members.TryAdd(existingMember.ID, existingMember);
-            return false;
+            await DeleteAsync(existingMember.ID);
+            Members.TryAdd(existingMember.ID, existingMember);
         }
 
-        public Task<bool> DeleteAsync(int id)
+        public Task DeleteAsync(int id)
         {
             return Task.FromResult(Members.Remove(id, out _));
         }

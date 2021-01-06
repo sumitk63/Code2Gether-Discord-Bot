@@ -1,13 +1,14 @@
 ﻿using System.Threading.Tasks;
+using Code2Gether_Discord_Bot.Library.CustomExceptions;
 using RestSharp;
 
 namespace Code2Gether_Discord_Bot.Library.Models.Repositories
 {
-    public class ProjectDAL : WebApiDALBase<Project>, IProjectRepository
+    public class ProjectDataAccessLayer : WebApiDataAccessLayerBase<Project>, IProjectRepository
     {
         protected override string _tableRoute => "Projects";
 
-        public ProjectDAL(string connectionString) : base(connectionString) { }
+        public ProjectDataAccessLayer(string connectionString) : base(connectionString) { }
 
         /// <summary>
         /// Retrieves project based on project name.
@@ -20,7 +21,9 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
 
             var result = await GetClient().ExecuteGetAsync<Project>(request);
 
-            return result.IsSuccessful ? result.Data : null;
+            if (!result.IsSuccessful) throw new DataAccessLayerTransactionFailedException($"Read via project name {projectName} failed!");
+
+            return result.Data;
         }
 
         /// <summary>
@@ -29,13 +32,13 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
         /// <param name="project">Project of member to add.</param>
         /// <param name="member">Member to add to project.</param>
         /// <returns>True if add is successful.</returns>
-        public async Task<bool> AddMemberAsync(Project project, Member member)
+        public async Task AddMemberAsync(Project project, Member member)
         {
             var request = new RestRequest($"{_tableRoute}/projectId={project.ID};memberId={member.ID}");
 
             var result = await GetClient().ExecutePostAsync<Project>(request);
 
-            return result.IsSuccessful;
+            if (!result.IsSuccessful) throw new DataAccessLayerTransactionFailedException($"Add member {member} to project {project} failed!");
         }
 
         /// <summary>
@@ -44,13 +47,13 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
         /// <param name="project">Project of member to delete.</param>
         /// <param name="member">Member to delete from project.</param>
         /// <returns>True if delete is successful.</returns>
-        public async Task<bool> RemoveMemberAsync(Project project, Member member)
+        public async Task RemoveMemberAsync(Project project, Member member)
         {
             var request = new RestRequest($"{_tableRoute}/projectId={project.ID};memberId={member.ID}", Method.DELETE);
 
             var result = await GetClient().ExecuteAsync<Project>(request);
 
-            return result.IsSuccessful;
+            if (!result.IsSuccessful) throw new DataAccessLayerTransactionFailedException($"Removal of {member} from {project} failed!");
         }
     }
 }

@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Code2Gether_Discord_Bot.Library.CustomExceptions;
 using Code2Gether_Discord_Bot.Library.Models;
 using Code2Gether_Discord_Bot.Library.Static;
 using Discord;
 using Discord.Commands;
+using Serilog;
 
 namespace Code2Gether_Discord_Bot.Library.BusinessLogic
 {
@@ -39,28 +41,27 @@ namespace Code2Gether_Discord_Bot.Library.BusinessLogic
 
             var projectName = ParseCommandArguments.ParseBy(' ', _arguments)[0];
 
-            var user = new Member(_context.User);   
-            
-            // Attempt to join the project
-            var result = await _projectManager.JoinProjectAsync(projectName, user);
+            var user = new Member(_context.User);
 
-            // Get the updated project object
-            var project = await _projectManager.GetProjectAsync(projectName);
-            
-            // If joining was successful
-            if (result)
+            Project project = null;
+
+            // Attempt to join the project
+            try
             {
+                await _projectManager.JoinProjectAsync(projectName, user);
+                project = await _projectManager.GetProjectAsync(projectName);
+
                 embedContent.Title = "Success";
                 embedContent.Description = $"{_context.User} has successfully joined project **{projectName}**!"
-                                         + Environment.NewLine
-                                         + Environment.NewLine
-                                         + project;
+                                           + Environment.NewLine
+                                           + Environment.NewLine
+                                           + project;
 
                 // If project has become active from new user
-                if (project.IsActive) 
+                if (project.IsActive)
                     TransitionToActiveProject(project);
             }
-            else
+            catch (DataAccessLayerTransactionFailedException e)
             {
                 embedContent.Title = "Failed";
                 embedContent.Description = $"{_context.User} failed to join project **{projectName}**!"
@@ -68,7 +69,7 @@ namespace Code2Gether_Discord_Bot.Library.BusinessLogic
                                            + Environment.NewLine
                                            + project;
             }
-
+            
             return embedContent;
         }
 
@@ -114,9 +115,6 @@ namespace Code2Gether_Discord_Bot.Library.BusinessLogic
             // Give every project member the role
             foreach (var member in project.Members)
             {
-                // todo: populate DiscordUserId based on the snowflake ID here.
-                // Causes a null refernece exception if it doesn't.
-
                 await _context.Guild
                     .GetUserAsync(member.SnowflakeId).Result
                     .AddRoleAsync(role);

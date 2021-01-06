@@ -1,17 +1,19 @@
-﻿using RestSharp;
+﻿using System;
+using RestSharp;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Code2Gether_Discord_Bot.Library.CustomExceptions;
 using Newtonsoft.Json;
 
 namespace Code2Gether_Discord_Bot.Library.Models.Repositories
 {
-    public abstract class WebApiDALBase<TDataModel> : IDataRepository<TDataModel>
+    public abstract class WebApiDataAccessLayerBase<TDataModel> : IDataRepository<TDataModel>
         where TDataModel : class, IDataModel
     {
         protected string _connectionString;
         protected abstract string _tableRoute { get; }
 
-        protected WebApiDALBase(string connectionString)
+        protected WebApiDataAccessLayerBase(string connectionString)
         {
             _connectionString = connectionString;
         }
@@ -21,7 +23,7 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
         /// </summary>
         /// <param name="newModel">Model to add to DB.</param>
         /// <returns>True if successful.</returns>
-        public async Task<bool> CreateAsync(TDataModel newModel)
+        public async Task CreateAsync(TDataModel newModel)
         {
             var client = GetClient();
 
@@ -32,8 +34,8 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
             request.AddJsonBody(jsonBody, "application/json");
 
             var result = await client.ExecutePostAsync<TDataModel>(request);
-            
-            return result.IsSuccessful;
+
+            if (!result.IsSuccessful) throw new DataAccessLayerTransactionFailedException($"Creation of {newModel.GetType().Name} failed!");
         }
 
         protected virtual string SerializeModel(TDataModel modelToSerialize)
@@ -53,8 +55,10 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
             var request = new RestRequest(_tableRoute);
 
             var result = await client.ExecuteGetAsync<IList<TDataModel>>(request);
-            
-            return result.IsSuccessful ? result.Data : null;
+
+            if (!result.IsSuccessful) throw new DataAccessLayerTransactionFailedException($"Read All of {typeof(TDataModel).Name} failed!");
+
+            return result.Data;
         }
 
         /// <summary>
@@ -70,7 +74,9 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
 
             var result = await client.ExecuteGetAsync<TDataModel>(request);
 
-            return result.IsSuccessful ? result.Data : null;
+            if (!result.IsSuccessful) throw new DataAccessLayerTransactionFailedException($"Read of {typeof(TDataModel).Name} failed!");
+
+            return result.Data;
         }
 
         /// <summary>
@@ -78,15 +84,15 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
         /// </summary>
         /// <param name="id">Primary key of record to delete.</param>
         /// <returns>True if delete is successful.</returns>
-        public async Task<bool> DeleteAsync(int id)
+        public async Task DeleteAsync(int id)
         {
             var client = GetClient();
 
             var request = new RestRequest($"{_tableRoute}/{id}", Method.DELETE);
 
             var result = await client.ExecuteAsync<TDataModel>(request);
-            
-            return result.IsSuccessful;
+
+            if (!result.IsSuccessful) throw new DataAccessLayerTransactionFailedException($"Deletion at id {id} failed!");
         }
 
         /// <summary>
@@ -94,29 +100,23 @@ namespace Code2Gether_Discord_Bot.Library.Models.Repositories
         /// </summary>
         /// <param name="modelToReplace">Record to update.</param>
         /// <returns>False if the record doesn't exist, or if the update failed.</returns>
-        public async Task<bool> UpdateAsync(TDataModel modelToReplace)
+        public async Task UpdateAsync(TDataModel modelToReplace)
         {
-            var modelToUpdate = await ReadAsync(modelToReplace.ID);
-
-            if (modelToUpdate == null)
-                return false;
-
             var client = GetClient();
 
             var request = new RestRequest($"{_tableRoute}/{modelToReplace.ID}", Method.PUT);
 
-            var jsonBody = SerializeModel(modelToReplace); // Had this set to the old model. Whoops!
+            var jsonBody = SerializeModel(modelToReplace);
 
             request.AddJsonBody(jsonBody);
 
             var result = await client.ExecuteAsync<TDataModel>(request);
 
-            return result.IsSuccessful;
+            if (!result.IsSuccessful) throw new DataAccessLayerTransactionFailedException($"Update of {typeof(TDataModel).Name} failed!");
         }
 
         protected RestClient GetClient()
         {
-            // Put any authentication protocols here?
             return new RestClient(_connectionString);
         }
     }

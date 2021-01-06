@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Code2Gether_Discord_Bot.Library.CustomExceptions;
 using Code2Gether_Discord_Bot.Library.Models.Repositories;
+using Serilog;
 
 namespace Code2Gether_Discord_Bot.Library.Models
 {
@@ -23,7 +25,15 @@ namespace Code2Gether_Discord_Bot.Library.Models
         /// <returns>true if the project exists. false if the project does not exist.</returns>
         public async Task<bool> DoesProjectExistAsync(string projectName)
         {
-            return await _projectRepository.ReadAsync(projectName) is not null;
+            try
+            {
+                await _projectRepository.ReadAsync(projectName);
+                return true;
+            }
+            catch (DataAccessLayerTransactionFailedException e)
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -47,27 +57,21 @@ namespace Code2Gether_Discord_Bot.Library.Models
         /// or author failed to join the project.</returns>
         public async Task<Project> CreateProjectAsync(string projectName, Member author)
         {
-            var retrievedAuthor = await _memberRepository.ReadFromSnowflakeAsync(author.SnowflakeId);
-
-            // If author doesn't exist
-            if (retrievedAuthor == null)
+            try
             {
-                // Create author member
-                if (await _memberRepository.CreateAsync(author))
-                    author = await _memberRepository.ReadFromSnowflakeAsync(author.SnowflakeId); // Update author
-                else
-                    throw new Exception($"Failed to create new member: {author}!");
+                var retrievedAuthor = await _memberRepository.ReadFromSnowflakeAsync(author.SnowflakeId);
+                author = retrievedAuthor;
             }
-            else // Author exists
+            catch (DataAccessLayerTransactionFailedException e)
             {
-                // Update local object for author
-                author = retrievedAuthor;     
+                await _memberRepository.CreateAsync(author);
+                author = await _memberRepository.ReadFromSnowflakeAsync(author.SnowflakeId); // Update author
             }
 
             var newProject = new Project(projectName, author);
 
-            if (!await _projectRepository.CreateAsync(newProject))
-                throw new Exception($"Failed to create new project: {projectName}!");
+            await _projectRepository.CreateAsync(newProject);
+
             // Retrieve project to add member to.
             newProject = await _projectRepository.ReadAsync(newProject.Name);
             await _projectRepository.AddMemberAsync(newProject, author);
@@ -76,7 +80,6 @@ namespace Code2Gether_Discord_Bot.Library.Models
             newProject = await _projectRepository.ReadAsync(newProject.Name);
 
             return newProject;
-
         }
 
         /// <summary>
@@ -84,24 +87,17 @@ namespace Code2Gether_Discord_Bot.Library.Models
         /// </summary>
         /// <param name="projectName">Project name to join</param>
         /// <param name="member">Member to join a project</param>
-        /// <returns>true if update was successful and the new member is apart of the project
-        /// or false if the user is already in the project.</returns>
-        public async Task<bool> JoinProjectAsync(string projectName, Member member)
+        public async Task JoinProjectAsync(string projectName, Member member)
         {
-            var retrievedMember = await _memberRepository.ReadFromSnowflakeAsync(member.SnowflakeId);
-
-            // If member isn't in db
-            if (retrievedMember == null)
+            try
             {
-                // Create member
-                if (!await _memberRepository.CreateAsync(member))
-                    throw new Exception($"Failed to add member: {member}");
-
-                member = await _memberRepository.ReadFromSnowflakeAsync(member.SnowflakeId);
-            }
-            else
-            {
+                var retrievedMember = await _memberRepository.ReadFromSnowflakeAsync(member.SnowflakeId);
                 member = retrievedMember;
+            }
+            catch (DataAccessLayerTransactionFailedException e)
+            {
+                await _memberRepository.CreateAsync(member);
+                member = await _memberRepository.ReadFromSnowflakeAsync(member.SnowflakeId);
             }
 
             // Get project matching projectName
@@ -109,23 +105,10 @@ namespace Code2Gether_Discord_Bot.Library.Models
 
             // If the given member by SnowflakeId does not exist in the project as a member
             // Add the member to the project.
-            if (project != null && !project.Members.Any(m => m.SnowflakeId == member.SnowflakeId))
+            if (!project.Members.Any(m => m.SnowflakeId == member.SnowflakeId))
             {
-                if (!await _projectRepository.AddMemberAsync(project, member))
-                    throw new Exception($"Failed to add member: {member}");
+                await _projectRepository.AddMemberAsync(project, member);
             }
-            else
-            {
-                return false;   // Else they are already in the project or project doesn't exist
-            }
-
-            // Get the updated project with new member.
-            project = await _projectRepository.ReadAsync(projectName);
-
-            // Check if project join is successful.
-            return project.Members
-                .Select(x => x.SnowflakeId)
-                .Contains(member.SnowflakeId);
         }
     }
 }

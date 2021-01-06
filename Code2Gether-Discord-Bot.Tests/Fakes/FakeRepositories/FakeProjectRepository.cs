@@ -12,7 +12,7 @@ namespace Code2Gether_Discord_Bot.Tests.Fakes.FakeRepositories
     {
         public IDictionary<int, Project> Projects = new ConcurrentDictionary<int, Project>();
 
-        public Task<bool> CreateAsync(Project newProject)
+        public Task CreateAsync(Project newProject)
         {
             return Task.FromResult(Projects.TryAdd(newProject.ID, newProject));
         }
@@ -37,19 +37,18 @@ namespace Code2Gether_Discord_Bot.Tests.Fakes.FakeRepositories
             return Task.FromResult(Projects.Values.AsEnumerable());
         }
 
-        public async Task<bool> UpdateAsync(Project existingProject)
+        public async Task UpdateAsync(Project existingProject)
         {
-            if (await DeleteAsync(existingProject.ID))
-                return Projects.TryAdd(existingProject.ID, existingProject);
-            return false;
+            await DeleteAsync(existingProject.ID);
+            Projects.TryAdd(existingProject.ID, existingProject);
         }
 
-        public Task<bool> DeleteAsync(int id)
+        public Task DeleteAsync(int id)
         {
             return Task.FromResult(Projects.Remove(id, out _));
         }
 
-        public Task<bool> AddMemberAsync(Project project, Member member)
+        public Task AddMemberAsync(Project project, Member member)
         {
             if (!project.Members.Any(m => m.SnowflakeId == member.SnowflakeId))
                 project.Members.Add(member);
@@ -57,9 +56,10 @@ namespace Code2Gether_Discord_Bot.Tests.Fakes.FakeRepositories
             return Task.FromResult(project.Members.Any(m => m.SnowflakeId == member.SnowflakeId));
         }
 
-        public Task<bool> RemoveMemberAsync(Project project, Member member)
+        public Task RemoveMemberAsync(Project project, Member member)
         {
-            throw new NotImplementedException();
+            return Task.FromResult(Projects.FirstOrDefault(p => p.Key == project.ID)
+                .Value.Members.Remove(member));
         }
     }
 }
